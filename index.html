@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1a2e">
+<title>SubwayShake — 210 Lafayette</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f5f7; }
+  #root { max-width: 480px; margin: 0 auto; min-height: 100vh; position: relative; }
+</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const BUILDING = {
+  address: "210 Lafayette St, New York, NY 10012",
+  neighborhood: "SoHo",
+  borough: "Manhattan",
+  subwayLine: "B/D Express (Sixth Avenue Line)",
+};
+
+const MTA_EMAIL = "customer.feedback@mtahq.org";
+
+const EFFECTS_OPTIONS = [
+  { id: "dishes", label: "Dishes rattling", icon: "\u{1F37D}\uFE0F" },
+  { id: "walls", label: "Walls shaking", icon: "\u{1F9F1}" },
+  { id: "furniture", label: "Furniture vibrating", icon: "\u{1FA91}" },
+  { id: "sleep", label: "Sleep disrupted", icon: "\u{1F634}" },
+  { id: "items_fell", label: "Items fell off shelves", icon: "\u{1F4E6}" },
+  { id: "cracking", label: "Wall/ceiling cracks", icon: "\u26A0\uFE0F" },
+];
+
+const FLOOR_OPTIONS = ["2nd","3rd","4th","5th","6th","7th","8th","9th","10th","11th","12th"];
+
+function formatEffects(selected) {
+  if (selected.length === 0) return "The vibration was severe enough to be felt throughout the apartment.";
+  const labels = selected.map((id) => EFFECTS_OPTIONS.find((e) => e.id === id)?.label.toLowerCase());
+  if (labels.length === 1) return `Effects included ${labels[0]}.`;
+  const last = labels.pop();
+  return `Effects included ${labels.join(", ")}, and ${last}.`;
+}
+
+function getNow() {
+  const d = new Date();
+  return {
+    date: d.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+    time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
+    iso: d.toISOString(),
+  };
+}
+
+function buildEmailBody(data) {
+  return `To Whom It May Concern,
+
+I am a resident at ${data.address} (${data.floor} floor), located directly above the ${data.subwayLine} subway tracks.
+
+On ${data.date} at approximately ${data.time}, an express train passed beneath our building at what appeared to be excessive speed, causing severe vibration throughout the structure.
+
+${data.effects}
+${data.notes ? `\nAdditional details: ${data.notes}\n` : ""}
+This is an ongoing issue that affects multiple tenants in our building and poses concerns about both quality of life and structural integrity. We have previously filed complaints with the MTA regarding this issue and saw temporary improvement, confirming that speed management at this location is both feasible and effective.
+
+We respectfully request that train operators be instructed to observe appropriate speed limits when passing through this section of track beneath 210 Lafayette St.
+
+Sincerely,
+${data.name || "[Your Name]"}${data.unit ? `\nUnit ${data.unit}` : ""}
+${data.address}`;
+}
+
+function buildSubject(data) {
+  return `Excessive Subway Vibration \u2014 ${data.address}, ${data.floor} Floor \u2014 ${data.date}`;
+}
+
+function buildMailtoUrl(data) {
+  const subject = encodeURIComponent(buildSubject(data));
+  const body = encodeURIComponent(buildEmailBody(data));
+  return `mailto:${MTA_EMAIL}?subject=${subject}&body=${body}`;
+}
+
+// Storage via localStorage
+function loadProfile() {
+  try {
+    const raw = localStorage.getItem("subwayshake-profile");
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function saveProfile(p) {
+  try { localStorage.setItem("subwayshake-profile", JSON.stringify(p)); }
+  catch (e) { console.error(e); }
+}
+function loadLog() {
+  try {
+    const raw = localStorage.getItem("subwayshake-log");
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function saveLog(l) {
+  try { localStorage.setItem("subwayshake-log", JSON.stringify(l)); }
+  catch (e) { console.error(e); }
+}
+
+function Header({ screen, onBack, complaintCount }) {
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+      padding: "20px 20px 24px", color: "#fff", position: "relative", overflow: "hidden",
+    }}>
+      <div style={{ position: "absolute", top: -40, right: -40, width: 120, height: 120, borderRadius: "50%", background: "rgba(255,107,107,0.12)" }} />
+      <div style={{ position: "relative", zIndex: 1 }}>
+        {screen !== "home" && (
+          <button onClick={onBack} style={{
+            background: "rgba(255,255,255,0.1)", border: "none", color: "#fff",
+            padding: "6px 14px", borderRadius: 20, cursor: "pointer", fontSize: 13, marginBottom: 12,
+          }}>{"\u2190"} Back</button>
+        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+          <div style={{
+            width: 42, height: 42, borderRadius: 12,
+            background: "linear-gradient(135deg, #ff6b6b, #ee5a24)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 22, boxShadow: "0 4px 15px rgba(255,107,107,0.3)",
+          }}>{"\u{1F687}"}</div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: "-0.3px" }}>SubwayShake</h1>
+            <p style={{ margin: 0, fontSize: 12, opacity: 0.7, letterSpacing: "0.5px" }}>210 Lafayette {"\u00B7"} B/D Express</p>
+          </div>
+        </div>
+        {screen === "home" && complaintCount > 0 && (
+          <div style={{
+            marginTop: 14, padding: "8px 14px", borderRadius: 10,
+            background: "rgba(78,205,196,0.15)", border: "1px solid rgba(78,205,196,0.25)",
+            fontSize: 13, display: "flex", alignItems: "center", gap: 8,
+          }}>
+            <span style={{ fontSize: 16 }}>{"\u{1F4CA}"}</span>
+            <span><strong>{complaintCount}</strong> complaint{complaintCount !== 1 ? "s" : ""} filed from this device</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReportScreen({ profile, onSent }) {
+  const [effects, setEffects] = useState([]);
+  const [notes, setNotes] = useState("");
+  const [sent, setSent] = useState(false);
+
+  const toggle = (id) => setEffects((p) => p.includes(id) ? p.filter((e) => e !== id) : [...p, id]);
+
+  const handleSend = () => {
+    const { date, time, iso } = getNow();
+    const data = {
+      address: BUILDING.address,
+      subwayLine: BUILDING.subwayLine,
+      floor: profile.floor,
+      name: profile.name,
+      unit: profile.unit,
+      date, time,
+      effects: formatEffects(effects),
+      notes,
+    };
+    window.location.href = buildMailtoUrl(data);
+    onSent({ ...data, timestamp: iso, channel: "email" });
+    setSent(true);
+  };
+
+  if (sent) {
+    return (
+      <div style={{ padding: 20 }}>
+        <div style={{
+          background: "#fff", borderRadius: 16, padding: 28, textAlign: "center",
+          boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+        }}>
+          <div style={{ fontSize: 56, marginBottom: 12 }}>{"\u2705"}</div>
+          <h2 style={{ margin: "0 0 8px", fontSize: 20, color: "#155724" }}>Email Opened</h2>
+          <p style={{ margin: "0 0 20px", fontSize: 14, color: "#666", lineHeight: 1.6 }}>
+            Your mail app should have the complaint ready. Just hit <strong>Send</strong>.
+          </p>
+          <div style={{
+            background: "#f8f9fa", borderRadius: 12, padding: 16, marginBottom: 16,
+            textAlign: "left", border: "1px solid #eee",
+          }}>
+            <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>
+              Maximize pressure {"\u2014"} file on more channels:
+            </p>
+            <a href="https://contact.mta.info/s/customer-feedback" target="_blank" rel="noopener noreferrer"
+              style={{
+                display: "block", padding: "10px 14px", borderRadius: 8, marginBottom: 8,
+                background: "#e8f4fd", color: "#0f3460", fontSize: 13, fontWeight: 600,
+                textDecoration: "none", textAlign: "center",
+              }}>
+              {"\u{1F687}"} MTA Online Form {"\u2192"}
+            </a>
+            <a href="tel:511"
+              style={{
+                display: "block", padding: "10px 14px", borderRadius: 8,
+                background: "#f0fffe", color: "#0f3460", fontSize: 13, fontWeight: 600,
+                textDecoration: "none", textAlign: "center",
+              }}>
+              {"\u{1F4DE}"} Call 511 (say "Subway")
+            </a>
+          </div>
+          <button
+            onClick={() => { setSent(false); setEffects([]); setNotes(""); }}
+            style={{
+              width: "100%", padding: 14, borderRadius: 12,
+              background: "#f5f5f5", border: "1px solid #ddd",
+              fontSize: 14, fontWeight: 600, color: "#666", cursor: "pointer",
+            }}>
+            {"\u2190"} Report Another Incident
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "20px 20px 100px" }}>
+      <div style={{
+        background: "#fff", borderRadius: 14, padding: 16, marginBottom: 14,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+        display: "flex", alignItems: "center", gap: 12,
+      }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 10,
+          background: "linear-gradient(135deg, rgba(255,107,107,0.13), rgba(238,90,36,0.13))",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+        }}>{"\u26A1"}</div>
+        <div>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#1a1a2e" }}>Report Vibration</p>
+          <p style={{ margin: 0, fontSize: 12, color: "#888" }}>
+            {getNow().time} {"\u00B7"} {profile.floor} floor{profile.unit ? ` \u00B7 Unit ${profile.unit}` : ""}
+          </p>
+        </div>
+      </div>
+
+      <div style={{
+        background: "#fff", borderRadius: 14, padding: 16, marginBottom: 14,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+      }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: "#1a1a2e", margin: "0 0 10px" }}>
+          What happened? <span style={{ fontWeight: 400, color: "#999" }}>(tap all that apply)</span>
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {EFFECTS_OPTIONS.map((eff) => {
+            const active = effects.includes(eff.id);
+            return (
+              <button key={eff.id} onClick={() => toggle(eff.id)} style={{
+                padding: "14px 10px", borderRadius: 12,
+                border: `2px solid ${active ? "#ff6b6b" : "#eee"}`,
+                background: active ? "#fff5f5" : "#fafafa",
+                cursor: "pointer", textAlign: "left", transition: "all 0.15s",
+                display: "flex", alignItems: "center", gap: 8,
+              }}>
+                <span style={{ fontSize: 20 }}>{eff.icon}</span>
+                <span style={{ fontSize: 13, fontWeight: active ? 600 : 400, color: active ? "#d63031" : "#333" }}>
+                  {eff.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Optional: anything else (e.g. happened twice in 5 min)"
+          rows={2}
+          style={{
+            width: "100%", padding: 12, borderRadius: 10, border: "1px solid #e0e0e0",
+            fontSize: 13, resize: "none", fontFamily: "inherit", marginTop: 12,
+            background: "#fafafa", boxSizing: "border-box",
+          }}
+        />
+      </div>
+
+      <button onClick={handleSend} style={{
+        width: "100%", padding: "20px 24px", borderRadius: 14,
+        background: "linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)",
+        color: "#fff", border: "none", fontSize: 18, fontWeight: 700,
+        cursor: "pointer", boxShadow: "0 6px 24px rgba(255,107,107,0.35)",
+        letterSpacing: "0.3px",
+      }}>
+        {"\u{1F6A8}"} Send Complaint to MTA
+      </button>
+      <p style={{ textAlign: "center", fontSize: 12, color: "#999", marginTop: 8 }}>
+        Opens your email app with the full complaint pre-written. Just hit Send.
+      </p>
+    </div>
+  );
+}
+
+const labelStyle = { fontSize: 13, fontWeight: 600, color: "#333", display: "block", marginBottom: 6 };
+const inputStyle = {
+  width: "100%", padding: 12, borderRadius: 10, border: "1px solid #ddd",
+  fontSize: 14, marginBottom: 18, boxSizing: "border-box", background: "#fafafa",
+  fontFamily: "inherit",
+};
+
+function Setup({ onSave, existingProfile }) {
+  const [floor, setFloor] = useState(existingProfile?.floor || "7th");
+  const [unit, setUnit] = useState(existingProfile?.unit || "");
+  const [name, setName] = useState(existingProfile?.name || "");
+
+  return (
+    <div style={{ padding: "20px 20px 100px" }}>
+      <div style={{
+        background: "#fff", borderRadius: 16, padding: 24,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+      }}>
+        <span style={{ fontSize: 32 }}>{"\u{1F3E2}"}</span>
+        <h2 style={{ margin: "8px 0 4px", fontSize: 18, color: "#1a1a2e" }}>Tenant Setup</h2>
+        <p style={{ margin: "0 0 20px", fontSize: 13, color: "#888" }}>
+          One-time setup. Saves so future complaints are instant.
+        </p>
+
+        <label style={labelStyle}>Your Name</label>
+        <input value={name} onChange={(e) => setName(e.target.value)}
+          placeholder="First and last name" style={inputStyle} />
+
+        <label style={labelStyle}>Your Floor</label>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 18 }}>
+          {FLOOR_OPTIONS.map((f) => (
+            <button key={f} onClick={() => setFloor(f)} style={{
+              padding: "8px 14px", borderRadius: 8, border: "2px solid",
+              fontSize: 13, cursor: "pointer",
+              borderColor: floor === f ? "#ff6b6b" : "#e0e0e0",
+              background: floor === f ? "#fff5f5" : "#fafafa",
+              fontWeight: floor === f ? 700 : 400,
+              color: floor === f ? "#ff6b6b" : "#666",
+            }}>{f}</button>
+          ))}
+        </div>
+
+        <label style={labelStyle}>
+          Unit Number <span style={{ fontWeight: 400, color: "#999" }}>(optional)</span>
+        </label>
+        <input value={unit} onChange={(e) => setUnit(e.target.value)}
+          placeholder="e.g. 7B" style={inputStyle} />
+
+        <button
+          onClick={() => { if (name.trim()) onSave({ floor, unit, name }); }}
+          style={{
+            width: "100%", padding: 16, borderRadius: 12, marginTop: 6,
+            background: name.trim() ? "linear-gradient(135deg, #0f3460, #16213e)" : "#ccc",
+            color: "#fff", border: "none", fontSize: 15, fontWeight: 700,
+            cursor: name.trim() ? "pointer" : "default",
+            boxShadow: name.trim() ? "0 4px 16px rgba(15,52,96,0.3)" : "none",
+          }}>
+          Save & Continue
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function HistoryScreen({ log }) {
+  if (log.length === 0) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: "#999" }}>
+        <span style={{ fontSize: 48, display: "block", marginBottom: 12 }}>{"\u{1F4ED}"}</span>
+        <p style={{ fontSize: 14 }}>No complaints filed yet.</p>
+        <p style={{ fontSize: 12, color: "#bbb" }}>When you send a complaint, it'll appear here.</p>
+      </div>
+    );
+  }
+  return (
+    <div style={{ padding: "20px 20px 100px" }}>
+      <h2 style={{ fontSize: 16, margin: "0 0 4px", color: "#1a1a2e" }}>Complaint History</h2>
+      <p style={{ fontSize: 12, color: "#999", margin: "0 0 14px" }}>{log.length} total from this device</p>
+      {log.slice().reverse().map((entry, i) => (
+        <div key={i} style={{
+          background: "#fff", borderRadius: 12, padding: 14, marginBottom: 10,
+          boxShadow: "0 1px 6px rgba(0,0,0,0.04)", border: "1px solid #eee",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a2e" }}>{entry.date}</span>
+            <span style={{
+              fontSize: 10, padding: "2px 8px", borderRadius: 6, textTransform: "uppercase",
+              background: "#e8f4fd", color: "#0f3460", fontWeight: 700, letterSpacing: "0.5px",
+            }}>Email {"\u2192"} MTA</span>
+          </div>
+          <p style={{ margin: 0, fontSize: 12, color: "#666" }}>
+            {entry.time} {"\u00B7"} {entry.floor} floor {"\u00B7"} {entry.effects}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NavBar({ screen, onNav }) {
+  const tabs = [
+    { id: "home", icon: "\u{1F6A8}", label: "Report" },
+    { id: "history", icon: "\u{1F4CB}", label: "History" },
+    { id: "setup", icon: "\u2699\uFE0F", label: "Settings" },
+  ];
+  return (
+    <div style={{
+      position: "fixed", bottom: 0, left: 0, right: 0,
+      background: "#fff", borderTop: "1px solid #eee",
+      display: "flex", justifyContent: "space-around",
+      padding: "8px 0 max(8px, env(safe-area-inset-bottom))",
+      boxShadow: "0 -2px 10px rgba(0,0,0,0.04)", zIndex: 100,
+    }}>
+      {tabs.map((t) => (
+        <button key={t.id} onClick={() => onNav(t.id)} style={{
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+          background: "none", border: "none", cursor: "pointer", padding: "4px 16px",
+          opacity: screen === t.id ? 1 : 0.4,
+        }}>
+          <span style={{ fontSize: 20 }}>{t.icon}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#333" }}>{t.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function App() {
+  const [screen, setScreen] = useState("home");
+  const [profile, setProfile] = useState(null);
+  const [log, setLog] = useState([]);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setProfile(loadProfile());
+    setLog(loadLog());
+    setReady(true);
+  }, []);
+
+  const handleSaveProfile = (p) => {
+    setProfile(p);
+    saveProfile(p);
+    setScreen("home");
+  };
+
+  const handleSent = (entry) => {
+    const updated = [...log, entry];
+    setLog(updated);
+    saveLog(updated);
+  };
+
+  if (!ready) return null;
+
+  return (
+    <React.Fragment>
+      <Header screen={screen} onBack={() => setScreen("home")} complaintCount={log.length} />
+      {screen === "home" && !profile && <Setup onSave={handleSaveProfile} />}
+      {screen === "home" && profile && <ReportScreen profile={profile} onSent={handleSent} />}
+      {screen === "history" && <HistoryScreen log={log} />}
+      {screen === "setup" && <Setup onSave={handleSaveProfile} existingProfile={profile} />}
+      <NavBar screen={screen} onNav={setScreen} />
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
